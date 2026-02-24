@@ -76,6 +76,10 @@ input {
   gap: 14px;
 }
 
+.app-container > * {
+  min-width: 0;
+}
+
 .card {
   background: var(--card);
   border: 1px solid rgba(255, 255, 255, 0.7);
@@ -270,11 +274,24 @@ input {
   color: var(--muted);
 }
 
+.status-note > *,
+.status-message > *,
+.status-warning > * {
+  min-width: 0;
+}
+
+.status-note span,
+.status-message,
+.status-warning {
+  overflow-wrap: anywhere;
+}
+
 .status-note code {
   background: rgba(16, 19, 24, 0.05);
   padding: 1px 5px;
   border-radius: 6px;
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .status-message {
@@ -418,6 +435,8 @@ input {
   position: relative;
   height: 270px;
   margin-top: 10px;
+  max-width: 100%;
+  overflow: clip;
 }
 
 .chart-svg {
@@ -437,6 +456,7 @@ input {
   left: 0;
   right: 0;
   height: 30px;
+  overflow: hidden;
 }
 
 .chart-month {
@@ -669,6 +689,7 @@ input {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .quick-category-icon {
@@ -722,12 +743,14 @@ input {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .quick-player-label {
   color: color-mix(in srgb, var(--accent) 72%, black);
   font-weight: 700;
   font-size: 12px;
+  min-width: 0;
 }
 
 .quick-player-count {
@@ -1038,6 +1061,51 @@ input {
 
   .date-input {
     width: 100%;
+  }
+
+  .hero {
+    padding: 16px 14px;
+  }
+
+  .hero-title-wrap {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .hero-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .hero-title {
+    font-size: clamp(1.7rem, 10vw, 2.2rem);
+    line-height: 0.98;
+  }
+
+  .hero-actions {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .hero-actions .btn {
+    max-width: 100%;
+  }
+
+  .status-pill {
+    max-width: 100%;
+  }
+
+  .chart-wrap {
+    height: 246px;
+  }
+
+  .chart-svg {
+    height: 208px;
+  }
+
+  .chart-month {
+    font-size: 10px;
   }
 
   .stats-line {

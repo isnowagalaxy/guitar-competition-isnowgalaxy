@@ -728,8 +728,8 @@ export default function App() {
               <div className="status-note">
                 <Database size={14} />
                 <span>
-                  Sitio público recomendado: define solo <code>VITE_EVENTS_API_URL</code> en Vercel. La edición se
-                  desbloquea pegando tu write token aquí (Admin / DB), y los demás quedan en modo lectura.
+                  Modo público: deja solo <code>VITE_EVENTS_API_URL</code> en Vercel. Para editar, desbloquea aquí con tu
+                  write token.
                 </span>
               </div>
               {statusMessage ? <div className="status-message">{statusMessage}</div> : null}
