@@ -44,8 +44,18 @@ const ACTION_TYPES = [
 
 const EDIT_TOKEN_SESSION_KEY = 'svr-edit-token-session';
 
-function getLeaderLabel(shaiTotal, ronaldTotal) {
-  if (shaiTotal === ronaldTotal) return null;
+function getLeaderLabel(shaiTotal, ronaldTotal, outcomeOverride = null) {
+  if (shaiTotal === ronaldTotal) {
+    const overrideWinner = outcomeOverride?.winner;
+    if (overrideWinner && PLAYER_META[overrideWinner]) {
+      return {
+        player: overrideWinner,
+        diff: null,
+        text: `${PLAYER_META[overrideWinner].name} lidera`,
+      };
+    }
+    return null;
+  }
   const leader = shaiTotal > ronaldTotal ? 'shai' : 'ronald';
   const diff = Math.abs(shaiTotal - ronaldTotal);
   return {
@@ -480,7 +490,11 @@ export default function App() {
   const yearOptions = getYearOptions(events, selectedYear);
   const stats = calculateDashboardStats(events, selectedYear);
   const chartData = buildChartData(events, selectedYear);
-  const leader = getLeaderLabel(stats.current.shaiTotal, stats.current.ronaldTotal);
+  const leader = getLeaderLabel(
+    stats.current.shaiTotal,
+    stats.current.ronaldTotal,
+    stats.current.outcomeOverride,
+  );
   const historyEvents = getRecentEvents(events, {
     year: historyScope === 'all' ? 'all' : selectedYear,
     limit: historyScope === 'all' ? 60 : 40,
