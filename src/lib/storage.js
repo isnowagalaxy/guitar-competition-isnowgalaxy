@@ -4,10 +4,11 @@ import { normalizeEvents } from './events.js';
 const STORE_KEY = 'svr-tracker-store-v2';
 const LEGACY_EVENTS_KEY = 'shai-vs-ronald-events';
 
-function getRemoteConfig() {
+function getRemoteConfig(tokenOverride) {
+  const envToken = (import.meta.env?.VITE_EVENTS_API_TOKEN || '').trim();
   return {
     url: (import.meta.env?.VITE_EVENTS_API_URL || '').trim(),
-    token: (import.meta.env?.VITE_EVENTS_API_TOKEN || '').trim(),
+    token: typeof tokenOverride === 'string' ? tokenOverride.trim() : envToken,
   };
 }
 
@@ -78,8 +79,8 @@ function writeLocalStore(events) {
   return store;
 }
 
-async function tryLoadRemoteEvents() {
-  const remote = getRemoteConfig();
+async function tryLoadRemoteEvents(options = {}) {
+  const remote = getRemoteConfig(options.tokenOverride);
   if (!remote.url) {
     return { ok: false, skipped: true, reason: 'remote-not-configured' };
   }
@@ -107,8 +108,8 @@ async function tryLoadRemoteEvents() {
   }
 }
 
-async function trySaveRemoteEvents(events) {
-  const remote = getRemoteConfig();
+async function trySaveRemoteEvents(events, options = {}) {
+  const remote = getRemoteConfig(options.tokenOverride);
   if (!remote.url) {
     return { ok: false, skipped: true, reason: 'remote-not-configured' };
   }
@@ -148,9 +149,9 @@ async function trySaveRemoteEvents(events) {
   }
 }
 
-export async function loadEventsSnapshot() {
+export async function loadEventsSnapshot(options = {}) {
   const localStore = readLocalStore();
-  const remoteAttempt = await tryLoadRemoteEvents();
+  const remoteAttempt = await tryLoadRemoteEvents(options);
 
   if (remoteAttempt.ok) {
     const mergedEvents = normalizeEvents([...localStore.events, ...remoteAttempt.events]);
@@ -174,9 +175,9 @@ export async function loadEventsSnapshot() {
   };
 }
 
-export async function saveEventsSnapshot(events) {
+export async function saveEventsSnapshot(events, options = {}) {
   const localStore = writeLocalStore(events);
-  const remoteAttempt = await trySaveRemoteEvents(localStore.events);
+  const remoteAttempt = await trySaveRemoteEvents(localStore.events, options);
 
   if (remoteAttempt.ok) {
     return {

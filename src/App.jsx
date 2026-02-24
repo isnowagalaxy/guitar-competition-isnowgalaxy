@@ -7,10 +7,11 @@ import {
   Clock,
   Database,
   Download,
-  Plus,
+  Lock,
   RefreshCw,
   Trash2,
   Trophy,
+  Unlock,
   Upload,
 } from 'lucide-react';
 import {
@@ -40,6 +41,8 @@ const ACTION_TYPES = [
   { id: 'tareaCompletada', icon: Calendar },
   { id: 'tareaTerminada', icon: CheckCircle2 },
 ];
+
+const EDIT_TOKEN_SESSION_KEY = 'svr-edit-token-session';
 
 function getLeaderLabel(shaiTotal, ronaldTotal) {
   if (shaiTotal === ronaldTotal) return null;
@@ -182,6 +185,7 @@ function QuickAddCard({
   onRemove,
   onToggleHistory,
   showHistory,
+  canEdit,
 }) {
   return (
     <section className="card quick-add-card">
@@ -246,6 +250,7 @@ function QuickAddCard({
                         className="quick-action-btn minus"
                         aria-label={`Quitar último punto ${player.name} ${typeMeta.label}`}
                         onClick={() => onRemove(player.id, action.id)}
+                        disabled={!canEdit}
                       >
                         −
                       </button>
@@ -254,6 +259,7 @@ function QuickAddCard({
                         className="quick-action-btn plus"
                         aria-label={`Agregar punto ${player.name} ${typeMeta.label}`}
                         onClick={() => onAdd(player.id, action.id)}
+                        disabled={!canEdit}
                       >
                         +
                       </button>
@@ -265,11 +271,18 @@ function QuickAddCard({
           );
         })}
       </div>
+
+      {!canEdit ? (
+        <div className="edit-lock-note">
+          <Lock size={14} />
+          <span>Modo lectura. Abre `Admin / DB` y desbloquea edición con tu key.</span>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function HistoryCard({ events, onDelete, scope, setScope, selectedYear }) {
+function HistoryCard({ events, onDelete, scope, setScope, selectedYear, canEdit }) {
   return (
     <section className="card history-card">
       <div className="card-header">
@@ -320,14 +333,16 @@ function HistoryCard({ events, onDelete, scope, setScope, selectedYear }) {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btn-ghost icon-only"
-                  onClick={() => onDelete(event.id)}
-                  aria-label={`Eliminar evento ${player.name} ${type.label}`}
-                >
-                  <Trash2 size={15} />
-                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost icon-only"
+                    onClick={() => onDelete(event.id)}
+                    aria-label={`Eliminar evento ${player.name} ${type.label}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -339,6 +354,7 @@ function HistoryCard({ events, onDelete, scope, setScope, selectedYear }) {
 
 export default function App() {
   const currentYear = String(new Date().getFullYear());
+  const bundledWriteToken = (import.meta.env?.VITE_EVENTS_API_TOKEN || '').trim();
   const [events, setEvents] = useState([]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [entryDate, setEntryDate] = useState(getTodayIsoLocal());
@@ -346,6 +362,11 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [historyScope, setHistoryScope] = useState('year');
+  const [editTokenInput, setEditTokenInput] = useState('');
+  const [sessionEditToken, setSessionEditToken] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return sessionStorage.getItem(EDIT_TOKEN_SESSION_KEY) || '';
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [syncMeta, setSyncMeta] = useState({
@@ -358,9 +379,12 @@ export default function App() {
 
   const importInputRef = useRef(null);
   const importModeRef = useRef('merge');
+  const activeWriteToken = (sessionEditToken || bundledWriteToken || '').trim();
+  const canEdit = Boolean(activeWriteToken);
+  const hasBundledWriteToken = Boolean(bundledWriteToken);
 
   async function refreshSnapshot() {
-    const snapshot = await loadEventsSnapshot();
+    const snapshot = await loadEventsSnapshot({ tokenOverride: activeWriteToken });
     setEvents(snapshot.events);
     setSyncMeta((previous) => ({
       ...previous,
@@ -381,7 +405,7 @@ export default function App() {
 
     (async () => {
       try {
-        const snapshot = await loadEventsSnapshot();
+        const snapshot = await loadEventsSnapshot({ tokenOverride: activeWriteToken });
         if (cancelled) return;
         setEvents(snapshot.events);
         setSyncMeta((previous) => ({
@@ -402,14 +426,14 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeWriteToken]);
 
   async function persist(nextEvents, notice = '') {
     const normalized = sortEvents(normalizeEvents(nextEvents));
     setEvents(normalized);
     setSyncMeta((previous) => ({ ...previous, saving: true }));
 
-    const result = await saveEventsSnapshot(normalized);
+    const result = await saveEventsSnapshot(normalized, { tokenOverride: activeWriteToken });
     setEvents(result.events);
     setSyncMeta((previous) => ({
       ...previous,
@@ -423,6 +447,36 @@ export default function App() {
     if (notice) setStatusMessage(notice);
   }
 
+  const requireEdit = () => {
+    if (canEdit) return true;
+    setShowAdminPanel(true);
+    setStatusMessage('Modo lectura: abre Admin / DB y pega tu key para editar.');
+    return false;
+  };
+
+  const unlockEditing = () => {
+    const token = editTokenInput.trim();
+    if (!token) {
+      setStatusMessage('Pega tu write token para desbloquear.');
+      return;
+    }
+    try {
+      sessionStorage.setItem(EDIT_TOKEN_SESSION_KEY, token);
+    } catch {}
+    setSessionEditToken(token);
+    setEditTokenInput('');
+    setStatusMessage('Edición desbloqueada en este navegador.');
+  };
+
+  const lockEditing = () => {
+    try {
+      sessionStorage.removeItem(EDIT_TOKEN_SESSION_KEY);
+    } catch {}
+    setSessionEditToken('');
+    setEditTokenInput('');
+    setStatusMessage(hasBundledWriteToken ? 'Edición sigue habilitada por token en env local.' : 'Edición bloqueada.');
+  };
+
   const yearOptions = getYearOptions(events, selectedYear);
   const stats = calculateDashboardStats(events, selectedYear);
   const chartData = buildChartData(events, selectedYear);
@@ -434,6 +488,7 @@ export default function App() {
   const storagePill = getStoragePill(syncMeta);
 
   const addPoint = (player, type) => {
+    if (!requireEdit()) return;
     const newEvent = createEvent({
       player,
       type,
@@ -447,6 +502,7 @@ export default function App() {
   };
 
   const removeLastPoint = (player, type) => {
+    if (!requireEdit()) return;
     const target = [...events]
       .filter((event) => event.year === selectedYear && event.player === player && event.type === type)
       .sort((a, b) => {
@@ -469,6 +525,7 @@ export default function App() {
   };
 
   const deleteEvent = (eventId) => {
+    if (!requireEdit()) return;
     const event = events.find((item) => item.id === eventId);
     if (!event) return;
     persist(
@@ -500,15 +557,18 @@ export default function App() {
   };
 
   const syncNow = async () => {
+    if (!requireEdit()) return;
     await persist(events, 'Sync manual completado.');
   };
 
   const openImportPicker = (mode) => {
+    if (!requireEdit()) return;
     importModeRef.current = mode;
     importInputRef.current?.click();
   };
 
   const onImportFileChange = async (event) => {
+    if (!requireEdit()) return;
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -573,6 +633,42 @@ export default function App() {
           {showAdminPanel ? (
             <div className="toolbar-grid">
               <div className="toolbar-section">
+                <label className="field-label">Modo edición</label>
+                <div className="admin-edit-row">
+                  {canEdit ? (
+                    <>
+                      <span className="edit-status-pill unlocked">
+                        <Unlock size={13} />
+                        Edición habilitada
+                      </span>
+                      {!hasBundledWriteToken ? (
+                        <button className="btn btn-secondary" type="button" onClick={lockEditing}>
+                          <Lock size={15} />
+                          Bloquear
+                        </button>
+                      ) : (
+                        <span className="edit-inline-note">Token en env (ideal solo local).</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="password"
+                        className="date-input admin-secret-input"
+                        placeholder="Pega tu write token"
+                        value={editTokenInput}
+                        onChange={(e) => setEditTokenInput(e.target.value)}
+                      />
+                      <button className="btn btn-secondary" type="button" onClick={unlockEditing}>
+                        <Unlock size={15} />
+                        Desbloquear
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="toolbar-section">
                 <label className="field-label">Backups / DB</label>
                 <div className="toolbar-inline wrap">
                   <button className="btn btn-secondary" type="button" onClick={exportSelectedYear}>
@@ -583,15 +679,15 @@ export default function App() {
                     <Download size={15} />
                     Exportar todo
                   </button>
-                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('merge')}>
+                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('merge')} disabled={!canEdit}>
                     <Upload size={15} />
                     Importar (merge)
                   </button>
-                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('replace')}>
+                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('replace')} disabled={!canEdit}>
                     <Upload size={15} />
                     Importar (replace)
                   </button>
-                  <button className="btn btn-secondary" type="button" onClick={syncNow}>
+                  <button className="btn btn-secondary" type="button" onClick={syncNow} disabled={!canEdit}>
                     <Database size={15} />
                     Sync ahora
                   </button>
@@ -632,9 +728,8 @@ export default function App() {
               <div className="status-note">
                 <Database size={14} />
                 <span>
-                  Prototipo local-first. Si defines <code>VITE_EVENTS_API_URL</code>, la app intenta cargar/guardar por
-                  GET/POST (ideal para Google Apps Script o Supabase Edge). Usa también <code>VITE_EVENTS_API_TOKEN</code>{' '}
-                  si quieres proteger escritura.
+                  Sitio público recomendado: define solo <code>VITE_EVENTS_API_URL</code> en Vercel. La edición se
+                  desbloquea pegando tu write token aquí (Admin / DB), y los demás quedan en modo lectura.
                 </span>
               </div>
               {statusMessage ? <div className="status-message">{statusMessage}</div> : null}
@@ -736,6 +831,7 @@ export default function App() {
           onRemove={removeLastPoint}
           onToggleHistory={() => setShowHistory((v) => !v)}
           showHistory={showHistory}
+          canEdit={canEdit}
         />
 
         {!showAdminPanel ? (
@@ -759,6 +855,7 @@ export default function App() {
             scope={historyScope}
             setScope={setHistoryScope}
             selectedYear={selectedYear}
+            canEdit={canEdit}
           />
         ) : null}
 

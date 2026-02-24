@@ -17,7 +17,8 @@ var EVENT_HEADERS = ['id', 'eventDate', 'year', 'player', 'type', 'createdAt', '
 function doGet(e) {
   try {
     var config = getConfig_();
-    requireToken_(config, e && e.parameter ? e.parameter.token : '');
+    // Public read is intentional: anyone with the site link can view the scoreboard.
+    // Write operations are protected by token in doPost().
 
     var eventSheet = getOrCreateSheet_(config.spreadsheet, config.sheetName);
     ensureEventSheetHeader_(eventSheet);
@@ -292,4 +293,3 @@ function jsonResponse_(payload) {
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
 }
-

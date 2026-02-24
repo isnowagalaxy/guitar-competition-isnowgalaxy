@@ -88,12 +88,20 @@ Este repo ya trae un backend listo para Google Apps Script:
 5. Deploy como Web App.
 6. Agrega en local/Vercel:
    - `VITE_EVENTS_API_URL`
-   - `VITE_EVENTS_API_TOKEN`
+   - (opcional en local) `VITE_EVENTS_API_TOKEN`
 7. Redeploy.
 
 Después de eso, la web lee y escribe eventos en Google Sheets.
 
 Nota: la idea es **expandir el mismo spreadsheet**, no reemplazar tus tabs viejas de 2023/2024.
+
+### Sitio público (recomendado)
+
+Para que otros puedan ver pero no editar:
+
+- En Vercel configura solo `VITE_EVENTS_API_URL`
+- No pongas `VITE_EVENTS_API_TOKEN` en Vercel
+- Tú desbloqueas edición desde `Admin / DB` pegando tu write token cuando lo necesites
 
 ## De dónde salen los datos históricos hoy
 
@@ -124,7 +132,7 @@ Además, hay una nota manual de resultado para `2025`:
 
 La app ya soporta un endpoint remoto vía `VITE_EVENTS_API_URL` con este contrato:
 
-- `GET` responde `{ "events": [...] }` o `[...]`
+- `GET` responde `{ "events": [...] }` o `[...]` (lectura pública)
 - `POST` recibe `{ "events": [...], "updatedAt": "...", "source": "svr-web-prototype", "token?": "..." }`
 
 Eso permite conectar:

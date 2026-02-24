@@ -65,20 +65,23 @@ VITE_EVENTS_API_URL=PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE
 VITE_EVENTS_API_TOKEN=PASTE_THE_WRITE_TOKEN_HERE
 ```
 
+Use the token in `.env.local` for your own machine (convenience while editing).
+
 For Vercel:
 
 1. Project -> `Settings` -> `Environment Variables`
-2. Add the same two variables:
-   - `VITE_EVENTS_API_URL`
-   - `VITE_EVENTS_API_TOKEN`
-3. Redeploy
+2. Recommended for a public scoreboard (view-only by default):
+   - Add `VITE_EVENTS_API_URL`
+   - Do **not** add `VITE_EVENTS_API_TOKEN`
+3. In the website UI, open `Admin / DB` and paste your write token only when you want to edit.
+4. Redeploy
 
 ## 6) How sync behaves
 
-- On page load, the app tries to read from the remote endpoint first.
+- On page load, the app tries to read from the remote endpoint first (public GET).
 - If remote fails, it falls back to local storage.
 - If remote is empty but local has data (seed/history), the app preserves local data and lets you push it with `Sync ahora`.
-- On save, it always writes local first, then attempts remote sync.
+- On save, it always writes local first, then attempts remote sync (POST requires token).
 
 ## Data format in the sheet
 
