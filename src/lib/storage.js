@@ -4,8 +4,17 @@ import { normalizeEvents } from './events.js';
 const STORE_KEY = 'svr-tracker-store-v2';
 const LEGACY_EVENTS_KEY = 'shai-vs-ronald-events';
 
-function getRemoteUrl() {
-  return (import.meta.env?.VITE_EVENTS_API_URL || '').trim();
+function getRemoteConfig() {
+  return {
+    url: (import.meta.env?.VITE_EVENTS_API_URL || '').trim(),
+    token: (import.meta.env?.VITE_EVENTS_API_TOKEN || '').trim(),
+  };
+}
+
+function buildRemoteGetUrl(url, token) {
+  if (!token) return url;
+  const hasQuery = url.includes('?');
+  return `${url}${hasQuery ? '&' : '?'}token=${encodeURIComponent(token)}`;
 }
 
 function parseJsonSafe(value) {
@@ -70,20 +79,24 @@ function writeLocalStore(events) {
 }
 
 async function tryLoadRemoteEvents() {
-  const remoteUrl = getRemoteUrl();
-  if (!remoteUrl) {
+  const remote = getRemoteConfig();
+  if (!remote.url) {
     return { ok: false, skipped: true, reason: 'remote-not-configured' };
   }
 
   try {
-    const response = await fetch(remoteUrl, {
+    const response = await fetch(buildRemoteGetUrl(remote.url, remote.token), {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
     });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
+    if (payload && payload.ok === false) {
+      throw new Error(payload.error || 'Remote GET failed');
+    }
     const remoteEvents = Array.isArray(payload) ? payload : payload?.events;
     if (!Array.isArray(remoteEvents)) {
       throw new Error('Remote response must be { events: [...] } or an array');
@@ -95,26 +108,38 @@ async function tryLoadRemoteEvents() {
 }
 
 async function trySaveRemoteEvents(events) {
-  const remoteUrl = getRemoteUrl();
-  if (!remoteUrl) {
+  const remote = getRemoteConfig();
+  if (!remote.url) {
     return { ok: false, skipped: true, reason: 'remote-not-configured' };
   }
 
   try {
-    const response = await fetch(remoteUrl, {
+    const body = {
+      events: normalizeEvents(events),
+      updatedAt: new Date().toISOString(),
+      source: 'svr-web-prototype',
+    };
+    if (remote.token) {
+      body.token = remote.token;
+    }
+
+    const response = await fetch(remote.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        events: normalizeEvents(events),
-        updatedAt: new Date().toISOString(),
-        source: 'svr-web-prototype',
-      }),
+      // Intentionally omit Content-Type header so browsers send a simple request
+      // (text/plain) and avoid a CORS preflight, which makes Google Apps Script
+      // web apps much easier to use as the backend.
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
+    }
+
+    const maybeJson = await response
+      .json()
+      .catch(() => ({ ok: true }));
+    if (maybeJson && maybeJson.ok === false) {
+      throw new Error(maybeJson.error || 'Remote POST failed');
     }
 
     return { ok: true };
@@ -128,10 +153,12 @@ export async function loadEventsSnapshot() {
   const remoteAttempt = await tryLoadRemoteEvents();
 
   if (remoteAttempt.ok) {
-    writeLocalStore(remoteAttempt.events);
+    const mergedEvents = normalizeEvents([...localStore.events, ...remoteAttempt.events]);
+    writeLocalStore(mergedEvents);
     return {
-      events: remoteAttempt.events,
-      storageMode: 'remote',
+      events: mergedEvents,
+      storageMode:
+        remoteAttempt.events.length === 0 && localStore.events.length > 0 ? 'remote-empty-merged' : 'remote',
       remoteConfigured: true,
       remoteError: '',
       seedVersion: SEED_VERSION,

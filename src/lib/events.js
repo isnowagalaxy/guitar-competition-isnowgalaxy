@@ -35,6 +35,15 @@ export const EVENT_TYPE_META = {
 
 export const EVENT_TYPE_IDS = Object.keys(EVENT_TYPE_META);
 
+// Years where the winner is known but detailed event-level tracking is missing.
+export const YEAR_OUTCOME_OVERRIDES = {
+  '2025': {
+    winner: 'ronald',
+    note: 'Ronald ganó 2025 (sin tracking semanal/detallado).',
+    source: 'manual-user-note',
+  },
+};
+
 export function getTodayIsoLocal() {
   const now = new Date();
   const yyyy = String(now.getFullYear());
@@ -158,7 +167,9 @@ export function calculateDashboardStats(events, selectedYear) {
   const currentRonaldTotal = getPlayerTotal(currentBreakdown.ronald);
   const currentTotal = currentShaiTotal + currentRonaldTotal;
 
-  const years = Array.from(new Set(events.map((event) => event.year))).sort();
+  const years = Array.from(
+    new Set([...events.map((event) => event.year), ...Object.keys(YEAR_OUTCOME_OVERRIDES)]),
+  ).sort();
   let shaiAllTime = 0;
   let ronaldAllTime = 0;
   let shaiYearsWon = 0;
@@ -170,8 +181,19 @@ export function calculateDashboardStats(events, selectedYear) {
     const ronaldTotal = getPlayerTotal(breakdown.ronald);
     shaiAllTime += shaiTotal;
     ronaldAllTime += ronaldTotal;
-    if (shaiTotal > ronaldTotal) shaiYearsWon += 1;
-    if (ronaldTotal > shaiTotal) ronaldYearsWon += 1;
+    if (shaiTotal > ronaldTotal) {
+      shaiYearsWon += 1;
+      return;
+    }
+    if (ronaldTotal > shaiTotal) {
+      ronaldYearsWon += 1;
+      return;
+    }
+
+    // If totals tie or are missing, allow a manual override for the yearly winner.
+    const override = YEAR_OUTCOME_OVERRIDES[year];
+    if (override?.winner === 'shai') shaiYearsWon += 1;
+    if (override?.winner === 'ronald') ronaldYearsWon += 1;
   });
 
   return {
@@ -182,6 +204,7 @@ export function calculateDashboardStats(events, selectedYear) {
       total: currentTotal,
       shaiPct: currentTotal ? ((currentShaiTotal / currentTotal) * 100).toFixed(1) : '0.0',
       ronaldPct: currentTotal ? ((currentRonaldTotal / currentTotal) * 100).toFixed(1) : '0.0',
+      outcomeOverride: YEAR_OUTCOME_OVERRIDES[selectedYear] || null,
     },
     allTime: {
       shaiTotal: shaiAllTime,
@@ -281,4 +304,3 @@ export function downloadJsonFile(filename, payload) {
   anchor.remove();
   URL.revokeObjectURL(url);
 }
-

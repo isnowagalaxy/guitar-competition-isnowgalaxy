@@ -57,6 +57,8 @@ function getStoragePill(syncMeta) {
   switch (syncMeta.storageMode) {
     case 'remote':
       return { label: 'Remoto activo', tone: 'success' };
+    case 'remote-empty-merged':
+      return { label: 'Remoto vacío (local preservado)', tone: 'warning' };
     case 'remote-mirror':
       return { label: 'Local + remoto', tone: 'success' };
     case 'local-unsynced':
@@ -171,38 +173,97 @@ function ChartCard({ year, chartData }) {
   );
 }
 
-function ActionCategoryCard({ typeId, breakdown, onAdd, onRemove }) {
-  const Icon = ACTION_TYPES.find((item) => item.id === typeId)?.icon || Plus;
-  const typeMeta = EVENT_TYPE_META[typeId];
-
+function QuickAddCard({
+  breakdown,
+  entryDate,
+  onChangeDate,
+  onResetDate,
+  onAdd,
+  onRemove,
+  onToggleHistory,
+  showHistory,
+}) {
   return (
-    <section className="card action-card">
-      <div className="card-header compact">
-        <h3 className="section-title with-icon">
-          <Icon size={16} />
-          {typeMeta.label}
-        </h3>
+    <section className="card quick-add-card">
+      <div className="card-header">
+        <div>
+          <p className="eyebrow">Quick Add</p>
+          <h2 className="card-title">Puntos</h2>
+        </div>
+        <button className="btn btn-secondary" type="button" onClick={onToggleHistory}>
+          {showHistory ? 'Ocultar historial' : 'Ver historial'}
+        </button>
       </div>
 
-      <div className="action-grid">
-        {Object.values(PLAYER_META).map((player) => (
-          <div key={player.id} className="player-action-block">
-            <div className="metric-pill" style={{ '--accent': player.color, '--accent-tint': player.tint }}>
-              <span className="metric-label">{player.name}</span>
-              <strong className="metric-value">{breakdown[player.id][typeId]}</strong>
-            </div>
+      <div className="quick-date-row">
+        <label className="field-label" htmlFor="quick-entry-date">
+          Fecha
+        </label>
+        <div className="toolbar-inline">
+          <input
+            id="quick-entry-date"
+            type="date"
+            className="date-input"
+            value={entryDate}
+            onChange={(e) => onChangeDate(e.target.value)}
+          />
+          <button className="btn btn-secondary" type="button" onClick={onResetDate}>
+            Hoy
+          </button>
+        </div>
+      </div>
 
-            <div className="row-buttons">
-              <button className="btn btn-primary" style={{ '--btn': player.color }} onClick={() => onAdd(player.id, typeId)}>
-                <Plus size={15} />
-                Agregar
-              </button>
-              <button className="btn btn-secondary icon-only" aria-label={`Quitar último punto ${player.name} ${typeMeta.label}`} onClick={() => onRemove(player.id, typeId)}>
-                −
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="quick-matrix">
+        {ACTION_TYPES.map((action) => {
+          const typeMeta = EVENT_TYPE_META[action.id];
+          const Icon = action.icon;
+          return (
+            <section key={action.id} className="quick-category-row">
+              <div className="quick-category-header">
+                <span className="quick-category-icon">
+                  <Icon size={14} />
+                </span>
+                <div className="quick-category-copy">
+                  <span className="quick-category-title">{typeMeta.label}</span>
+                  <span className="quick-category-short">{typeMeta.shortLabel}</span>
+                </div>
+              </div>
+
+              <div className="quick-player-controls-grid">
+                {Object.values(PLAYER_META).map((player) => (
+                  <div
+                    key={`${action.id}-${player.id}`}
+                    className="quick-player-control"
+                    style={{ '--accent': player.color, '--accent-tint': player.tint }}
+                  >
+                    <div className="quick-player-topline">
+                      <span className="quick-player-label">{player.name}</span>
+                      <strong className="quick-player-count">{breakdown[player.id][action.id]}</strong>
+                    </div>
+                    <div className="quick-player-buttons">
+                      <button
+                        type="button"
+                        className="quick-action-btn minus"
+                        aria-label={`Quitar último punto ${player.name} ${typeMeta.label}`}
+                        onClick={() => onRemove(player.id, action.id)}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        className="quick-action-btn plus"
+                        aria-label={`Agregar punto ${player.name} ${typeMeta.label}`}
+                        onClick={() => onAdd(player.id, action.id)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </section>
   );
@@ -282,6 +343,8 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [entryDate, setEntryDate] = useState(getTodayIsoLocal());
   const [showStats, setShowStats] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [historyScope, setHistoryScope] = useState('year');
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
@@ -436,6 +499,10 @@ export default function App() {
     setStatusMessage(`Backup exportado (${selectedYear}).`);
   };
 
+  const syncNow = async () => {
+    await persist(events, 'Sync manual completado.');
+  };
+
   const openImportPicker = (mode) => {
     importModeRef.current = mode;
     importInputRef.current?.click();
@@ -462,6 +529,7 @@ export default function App() {
   };
 
   const selectedBreakdown = stats.current.breakdown;
+  const yearOutcomeOverride = stats.current.outcomeOverride;
 
   return (
     <div className="app-shell">
@@ -476,13 +544,25 @@ export default function App() {
                 <Trophy size={20} />
               </div>
               <div>
-                <p className="eyebrow">Competition Tracker</p>
-                <h1 className="hero-title">Shai vs Ronald</h1>
+                <p className="eyebrow hero-kicker">Guitar Competition</p>
+                <h1 className="hero-title">
+                  <span className="hero-name-shai">Shai</span>{' '}
+                  <span className="hero-vs">vs</span>{' '}
+                  <span className="hero-name-ronald">Ronald</span>
+                </h1>
               </div>
             </div>
 
             <div className="hero-actions">
-              <span className={`status-pill ${storagePill.tone}`}>{storagePill.label}</span>
+              {showAdminPanel ? <span className={`status-pill ${storagePill.tone}`}>{storagePill.label}</span> : null}
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowAdminPanel((v) => !v)}
+                type="button"
+              >
+                <Database size={15} />
+                {showAdminPanel ? 'Cerrar admin' : 'Admin / DB'}
+              </button>
               <button className="btn btn-secondary" onClick={() => setShowStats((v) => !v)} type="button">
                 <BarChart3 size={15} />
                 {showStats ? 'Ocultar stats' : 'Ver stats'}
@@ -490,51 +570,39 @@ export default function App() {
             </div>
           </div>
 
-          <div className="toolbar-grid">
-            <div className="toolbar-section">
-              <label className="field-label" htmlFor="entry-date">
-                Fecha del punto
-              </label>
-              <div className="toolbar-inline">
-                <input
-                  id="entry-date"
-                  type="date"
-                  className="date-input"
-                  value={entryDate}
-                  onChange={(e) => setEntryDate(e.target.value)}
-                />
-                <button className="btn btn-secondary" type="button" onClick={() => setEntryDate(getTodayIsoLocal())}>
-                  Hoy
-                </button>
+          {showAdminPanel ? (
+            <div className="toolbar-grid">
+              <div className="toolbar-section">
+                <label className="field-label">Backups / DB</label>
+                <div className="toolbar-inline wrap">
+                  <button className="btn btn-secondary" type="button" onClick={exportSelectedYear}>
+                    <Download size={15} />
+                    Exportar {selectedYear}
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={exportAll}>
+                    <Download size={15} />
+                    Exportar todo
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('merge')}>
+                    <Upload size={15} />
+                    Importar (merge)
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('replace')}>
+                    <Upload size={15} />
+                    Importar (replace)
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={syncNow}>
+                    <Database size={15} />
+                    Sync ahora
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={refreshSnapshot}>
+                    <RefreshCw size={15} />
+                    Recargar
+                  </button>
+                </div>
               </div>
             </div>
-
-            <div className="toolbar-section">
-              <label className="field-label">Backups / DB</label>
-              <div className="toolbar-inline wrap">
-                <button className="btn btn-secondary" type="button" onClick={exportSelectedYear}>
-                  <Download size={15} />
-                  Exportar {selectedYear}
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={exportAll}>
-                  <Download size={15} />
-                  Exportar todo
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('merge')}>
-                  <Upload size={15} />
-                  Importar (merge)
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={() => openImportPicker('replace')}>
-                  <Upload size={15} />
-                  Importar (replace)
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={refreshSnapshot}>
-                  <RefreshCw size={15} />
-                  Recargar
-                </button>
-              </div>
-            </div>
-          </div>
+          ) : null}
 
           <input
             ref={importInputRef}
@@ -559,17 +627,24 @@ export default function App() {
             ))}
           </div>
 
-          <div className="status-note-wrap">
-            <div className="status-note">
-              <Database size={14} />
-              <span>
-                Prototipo local-first. Si defines <code>VITE_EVENTS_API_URL</code>, la app intenta cargar/guardar por
-                GET/POST (ideal para Google Apps Script o Supabase Edge).
-              </span>
+          {showAdminPanel ? (
+            <div className="status-note-wrap">
+              <div className="status-note">
+                <Database size={14} />
+                <span>
+                  Prototipo local-first. Si defines <code>VITE_EVENTS_API_URL</code>, la app intenta cargar/guardar por
+                  GET/POST (ideal para Google Apps Script o Supabase Edge). Usa también <code>VITE_EVENTS_API_TOKEN</code>{' '}
+                  si quieres proteger escritura.
+                </span>
+              </div>
+              {statusMessage ? <div className="status-message">{statusMessage}</div> : null}
+              {syncMeta.remoteError ? <div className="status-warning">Sync remoto falló: {syncMeta.remoteError}</div> : null}
             </div>
-            {statusMessage ? <div className="status-message">{statusMessage}</div> : null}
-            {syncMeta.remoteError ? <div className="status-warning">Sync remoto falló: {syncMeta.remoteError}</div> : null}
-          </div>
+          ) : statusMessage ? (
+            <div className="status-note-wrap">
+              <div className="status-message">{statusMessage}</div>
+            </div>
+          ) : null}
         </header>
 
         <ChartCard year={selectedYear} chartData={chartData} />
@@ -604,6 +679,13 @@ export default function App() {
               );
             })}
           </div>
+
+          {yearOutcomeOverride ? (
+            <div className="year-outcome-note">
+              <span className="year-outcome-label">Nota {selectedYear}</span>
+              <span>{yearOutcomeOverride.note}</span>
+            </div>
+          ) : null}
         </section>
 
         {showStats ? (
@@ -645,25 +727,40 @@ export default function App() {
           </section>
         ) : null}
 
-        <div className="actions-stack">
-          {ACTION_TYPES.map((item) => (
-            <ActionCategoryCard
-              key={item.id}
-              typeId={item.id}
-              breakdown={selectedBreakdown}
-              onAdd={addPoint}
-              onRemove={removeLastPoint}
-            />
-          ))}
-        </div>
-
-        <HistoryCard
-          events={historyEvents}
-          onDelete={deleteEvent}
-          scope={historyScope}
-          setScope={setHistoryScope}
-          selectedYear={selectedYear}
+        <QuickAddCard
+          breakdown={selectedBreakdown}
+          entryDate={entryDate}
+          onChangeDate={setEntryDate}
+          onResetDate={() => setEntryDate(getTodayIsoLocal())}
+          onAdd={addPoint}
+          onRemove={removeLastPoint}
+          onToggleHistory={() => setShowHistory((v) => !v)}
+          showHistory={showHistory}
         />
+
+        {!showAdminPanel ? (
+          <section className="card mini-controls-card">
+            <div className="mini-controls-row">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setShowAdminPanel(true)}
+              >
+                Admin / DB
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {showHistory ? (
+          <HistoryCard
+            events={historyEvents}
+            onDelete={deleteEvent}
+            scope={historyScope}
+            setScope={setHistoryScope}
+            selectedYear={selectedYear}
+          />
+        ) : null}
 
         {isLoading ? <div className="loading-overlay">Cargando…</div> : null}
       </main>

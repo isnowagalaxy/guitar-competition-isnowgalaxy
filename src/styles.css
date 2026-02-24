@@ -124,9 +124,27 @@ input {
 
 .hero-title {
   margin: 2px 0 0;
-  font-size: clamp(1.35rem, 5vw, 2rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  font-size: clamp(2rem, 7vw, 3rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+  font-weight: 800;
+}
+
+.hero-kicker {
+  letter-spacing: 0.1em;
+}
+
+.hero-name-shai {
+  color: #0a84ff;
+}
+
+.hero-name-ronald {
+  color: #ff453a;
+}
+
+.hero-vs {
+  color: rgba(16, 19, 24, 0.45);
+  font-weight: 700;
 }
 
 .hero-actions {
@@ -470,6 +488,25 @@ input {
   gap: 10px;
 }
 
+.year-outcome-note {
+  margin-top: 2px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 149, 0, 0.35);
+  background: rgba(255, 149, 0, 0.08);
+  color: #7a4700;
+  padding: 10px 12px;
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.year-outcome-label {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .score-box {
   border-radius: 16px;
   padding: 14px;
@@ -554,6 +591,155 @@ input {
   gap: 12px;
 }
 
+.quick-add-card {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-date-row {
+  display: grid;
+  gap: 6px;
+}
+
+.quick-matrix {
+  display: grid;
+  gap: 10px;
+}
+
+.quick-category-row {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 16px;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.quick-category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-category-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 19, 24, 0.06);
+  color: #2d3440;
+}
+
+.quick-category-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.quick-category-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.quick-category-short {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.quick-player-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-player-control {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, white);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-tint) 80%, white), var(--accent-tint));
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.quick-player-topline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quick-player-label {
+  color: color-mix(in srgb, var(--accent) 72%, black);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.quick-player-count {
+  color: var(--accent);
+  font-size: clamp(1.35rem, 5vw, 1.8rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+}
+
+.quick-player-buttons {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 8px;
+}
+
+.quick-action-btn {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, white);
+  border-radius: 12px;
+  min-height: 42px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.quick-action-btn.minus {
+  background: rgba(255, 255, 255, 0.72);
+  color: color-mix(in srgb, var(--accent) 72%, black);
+}
+
+.quick-action-btn.plus {
+  background: color-mix(in srgb, var(--accent) 92%, white);
+  color: #fff;
+}
+
+.quick-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.quick-action-btn:active {
+  transform: translateY(0);
+}
+
+.quick-add-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.quick-add-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.quick-add-hint strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .action-card {
   display: grid;
   gap: 12px;
@@ -606,6 +792,16 @@ input {
 .history-card {
   display: grid;
   gap: 12px;
+}
+
+.mini-controls-card {
+  padding-block: 12px;
+}
+
+.mini-controls-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .segmented {
@@ -731,6 +927,10 @@ input {
     grid-template-columns: 1fr;
   }
 
+  .quick-player-controls-grid {
+    grid-template-columns: 1fr;
+  }
+
   .score-grid,
   .stats-grid {
     grid-template-columns: 1fr 1fr;
@@ -775,4 +975,3 @@ input {
     scroll-behavior: auto !important;
   }
 }
-
