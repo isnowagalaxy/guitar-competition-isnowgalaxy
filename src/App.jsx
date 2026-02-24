@@ -34,6 +34,7 @@ import {
   importEventsFromJsonFile,
   loadEventsSnapshot,
   saveEventsSnapshot,
+  validateRemoteWriteToken,
 } from './lib/storage.js';
 
 const ACTION_TYPES = [
@@ -378,6 +379,7 @@ export default function App() {
     return sessionStorage.getItem(EDIT_TOKEN_SESSION_KEY) || '';
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [syncMeta, setSyncMeta] = useState({
     storageMode: 'local',
@@ -464,18 +466,37 @@ export default function App() {
     return false;
   };
 
-  const unlockEditing = () => {
+  const unlockEditing = async () => {
     const token = editTokenInput.trim();
     if (!token) {
       setStatusMessage('Pega tu write token para desbloquear.');
       return;
     }
+
+    setIsUnlocking(true);
     try {
-      sessionStorage.setItem(EDIT_TOKEN_SESSION_KEY, token);
-    } catch {}
-    setSessionEditToken(token);
-    setEditTokenInput('');
-    setStatusMessage('Edición desbloqueada en este navegador.');
+      const validation = await validateRemoteWriteToken(events, { tokenOverride: token });
+
+      if (!validation.ok) {
+        if (validation.skipped) {
+          setStatusMessage('No se puede validar el token: falta endpoint remoto.');
+        } else if ((validation.reason || '').toLowerCase().includes('unauthorized')) {
+          setStatusMessage('Write token inválido.');
+        } else {
+          setStatusMessage(`No se pudo validar el token (${validation.reason}).`);
+        }
+        return;
+      }
+
+      try {
+        sessionStorage.setItem(EDIT_TOKEN_SESSION_KEY, token);
+      } catch {}
+      setSessionEditToken(token);
+      setEditTokenInput('');
+      setStatusMessage('Edición desbloqueada en este navegador.');
+    } finally {
+      setIsUnlocking(false);
+    }
   };
 
   const lockEditing = () => {
@@ -671,11 +692,17 @@ export default function App() {
                         className="date-input admin-secret-input"
                         placeholder="Pega tu write token"
                         value={editTokenInput}
+                        disabled={isUnlocking}
                         onChange={(e) => setEditTokenInput(e.target.value)}
                       />
-                      <button className="btn btn-secondary" type="button" onClick={unlockEditing}>
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={unlockEditing}
+                        disabled={isUnlocking}
+                      >
                         <Unlock size={15} />
-                        Desbloquear
+                        {isUnlocking ? 'Validando…' : 'Desbloquear'}
                       </button>
                     </>
                   )}

@@ -149,6 +149,18 @@ async function trySaveRemoteEvents(events, options = {}) {
   }
 }
 
+export async function validateRemoteWriteToken(events, options = {}) {
+  const attempt = await trySaveRemoteEvents(events, options);
+  if (attempt.ok) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    skipped: attempt.skipped,
+    reason: attempt.reason || 'token-validation-failed',
+  };
+}
+
 export async function loadEventsSnapshot(options = {}) {
   const localStore = readLocalStore();
   const remoteAttempt = await tryLoadRemoteEvents(options);
