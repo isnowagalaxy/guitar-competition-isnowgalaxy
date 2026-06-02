@@ -425,6 +425,10 @@ button {
   font-size: 11px;
 }
 
+.chart-scale-toggle {
+  font-size: 11px;
+}
+
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -462,8 +466,15 @@ button {
 }
 
 .chart-readout strong {
-  color: var(--ink);
+  color: var(--leader-color);
   font-size: 12px;
+}
+
+.chart-readout-leader {
+  border: 1px solid color-mix(in srgb, var(--leader-color) 22%, white);
+  border-radius: 999px;
+  background: var(--leader-bg);
+  padding: 5px 8px;
 }
 
 .chart-readout-date {
@@ -498,8 +509,15 @@ button {
   height: 270px;
   margin-top: 10px;
   max-width: 100%;
-  padding-left: 28px;
   overflow: visible;
+}
+
+.chart-plot-area {
+  position: absolute;
+  top: 0;
+  left: 28px;
+  right: 0;
+  height: 232px;
 }
 
 .chart-svg {
@@ -517,6 +535,45 @@ button {
 .chart-zero-line {
   stroke: rgba(16, 19, 24, 0.18);
   stroke-width: 0.2;
+}
+
+.chart-gap-band {
+  pointer-events: none;
+}
+
+.chart-gap-band-shai {
+  fill: rgba(10, 132, 255, 0.055);
+}
+
+.chart-gap-band-ronald {
+  fill: rgba(255, 69, 58, 0.055);
+}
+
+.chart-gap-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.chart-gap-label {
+  position: absolute;
+  left: 10px;
+  color: rgba(103, 113, 133, 0.4);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.chart-gap-label.shai {
+  top: 18px;
+  color: rgba(10, 132, 255, 0.35);
+}
+
+.chart-gap-label.ronald {
+  bottom: 48px;
+  color: rgba(255, 69, 58, 0.35);
 }
 
 .chart-y-axis {
@@ -553,20 +610,6 @@ button {
   stroke-dasharray: 1.2 1.2;
 }
 
-.chart-active-dot {
-  stroke: rgba(255, 255, 255, 0.94);
-  stroke-width: 0.48;
-  filter: drop-shadow(0 1px 1.5px rgba(16, 19, 24, 0.22));
-}
-
-.chart-active-dot-shai {
-  fill: #0a84ff;
-}
-
-.chart-active-dot-ronald {
-  fill: #ff453a;
-}
-
 .chart-hit-zone {
   fill: transparent;
   cursor: crosshair;
@@ -580,8 +623,8 @@ button {
 
 .chart-months {
   position: absolute;
-  bottom: 0;
-  left: 28px;
+  top: 232px;
+  left: 0;
   right: 0;
   height: 30px;
   overflow: hidden;
@@ -594,6 +637,26 @@ button {
   font-size: 11px;
   font-weight: 700;
   text-transform: capitalize;
+}
+
+.chart-focus-dot {
+  position: absolute;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.94);
+  box-shadow: 0 5px 13px rgba(16, 19, 24, 0.22);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.chart-focus-dot.shai {
+  background: #0a84ff;
+}
+
+.chart-focus-dot.ronald {
+  background: #ff453a;
 }
 
 .empty-state {
@@ -1248,6 +1311,18 @@ button {
 
   .chart-y-axis {
     height: 208px;
+  }
+
+  .chart-plot-area {
+    height: 208px;
+  }
+
+  .chart-months {
+    top: 208px;
+  }
+
+  .chart-gap-label {
+    font-size: 10px;
   }
 
   .stats-line {

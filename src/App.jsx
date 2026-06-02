@@ -87,6 +87,7 @@ function getStoragePill(syncMeta) {
 function ChartCard({ year, chartData }) {
   const [activeIndex, setActiveIndex] = useState(null);
   const [chartView, setChartView] = useState('score');
+  const [chartScale, setChartScale] = useState('auto');
 
   if (!chartData.length) {
     return (
@@ -108,11 +109,17 @@ function ChartCard({ year, chartData }) {
   const width = 100;
   const height = 54;
   const padding = 8;
-  const maxValue = Math.max(
+  const rawMaxValue = Math.max(
     chartData.at(-1)?.shai || 0,
     chartData.at(-1)?.ronald || 0,
     1,
   );
+  const maxValue =
+    chartScale === 'wide'
+      ? Math.ceil(rawMaxValue * 1.45)
+      : chartScale === 'close'
+        ? rawMaxValue
+        : Math.ceil(rawMaxValue * 1.12);
   const denominator = Math.max(chartData.length - 1, 1);
   const xScale = (index) => padding + (index / denominator) * (width - padding * 2);
   const yScale = (value) => height - padding - (value / maxValue) * (height - padding * 2);
@@ -121,7 +128,13 @@ function ChartCard({ year, chartData }) {
   const shaiPoints = toPoints('shai');
   const ronaldPoints = toPoints('ronald');
   const monthTicks = getMonthTicks(chartData);
-  const gapMaxValue = Math.max(...chartData.map((point) => Math.abs(point.shai - point.ronald)), 1);
+  const rawGapMaxValue = Math.max(...chartData.map((point) => Math.abs(point.shai - point.ronald)), 1);
+  const gapMaxValue =
+    chartScale === 'wide'
+      ? Math.ceil(rawGapMaxValue * 2)
+      : chartScale === 'close'
+        ? rawGapMaxValue
+        : Math.ceil(rawGapMaxValue * 1.25);
   const gapMidpoint = height / 2;
   const yGapScale = (value) => gapMidpoint - (value / gapMaxValue) * (height / 2 - padding);
   const gapPoints = chartData.map((point, index) => `${xScale(index)},${yGapScale(point.shai - point.ronald)}`).join(' ');
@@ -134,6 +147,15 @@ function ChartCard({ year, chartData }) {
       : null;
   const inspectedDiff = inspectedPoint ? Math.abs(inspectedPoint.shai - inspectedPoint.ronald) : 0;
   const inspectedGap = inspectedPoint ? inspectedPoint.shai - inspectedPoint.ronald : 0;
+  const inspectedY =
+    chartView === 'gap'
+      ? yGapScale(inspectedGap)
+      : yScale(inspectedLeader === 'ronald' ? inspectedPoint.ronald : inspectedPoint.shai);
+  const inspectedLeftPct = (inspectedX / width) * 100;
+  const inspectedTopPct = (inspectedY / height) * 100;
+  const shaiMarkerTopPct = (yScale(inspectedPoint.shai) / height) * 100;
+  const ronaldMarkerTopPct = (yScale(inspectedPoint.ronald) / height) * 100;
+  const leaderTone = inspectedLeader || 'tie';
   const yAxisLabels =
     chartView === 'gap'
       ? [
@@ -182,6 +204,29 @@ function ChartCard({ year, chartData }) {
               Diferencia
             </button>
           </div>
+          <div className="segmented chart-scale-toggle" aria-label="Escala del gráfico">
+            <button
+              className={`segment ${chartScale === 'auto' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setChartScale('auto')}
+            >
+              Auto
+            </button>
+            <button
+              className={`segment ${chartScale === 'close' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setChartScale('close')}
+            >
+              Close
+            </button>
+            <button
+              className={`segment ${chartScale === 'wide' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setChartScale('wide')}
+            >
+              Wide
+            </button>
+          </div>
         </div>
       </div>
 
@@ -189,7 +234,13 @@ function ChartCard({ year, chartData }) {
         <span className="chart-readout-date">{formatEventDate(inspectedPoint.date)}</span>
         <span className="chart-readout-score shai">Shai {inspectedPoint.shai}</span>
         <span className="chart-readout-score ronald">Ronald {inspectedPoint.ronald}</span>
-        <strong>
+        <strong
+          className={`chart-readout-leader ${leaderTone}`}
+          style={{
+            '--leader-color': inspectedLeader ? PLAYER_META[inspectedLeader].color : '#3a4251',
+            '--leader-bg': inspectedLeader ? PLAYER_META[inspectedLeader].tint : 'rgba(16, 19, 24, 0.05)',
+          }}
+        >
           {inspectedLeader ? `Diferencia: ${PLAYER_META[inspectedLeader].name} por ${inspectedDiff}` : 'Diferencia: empate'}
         </strong>
       </div>
@@ -206,102 +257,143 @@ function ChartCard({ year, chartData }) {
             </span>
           ))}
         </div>
-        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" aria-label={`Gráfico de progreso ${year}`}>
-          {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-            <line
-              key={fraction}
-              x1={padding}
-              y1={height - padding - fraction * (height - padding * 2)}
-              x2={width - padding}
-              y2={height - padding - fraction * (height - padding * 2)}
-              className="chart-grid-line"
-            />
-          ))}
-
-          {chartView === 'gap' ? (
-            <>
-              <line x1={padding} y1={yGapScale(0)} x2={width - padding} y2={yGapScale(0)} className="chart-zero-line" />
-              <polyline points={gapPoints} fill="none" stroke="#1f2937" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-            </>
-          ) : (
-            <>
-              <path
-                d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
-                fill="rgba(10,132,255,0.1)"
+        <div className="chart-plot-area">
+          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" aria-label={`Gráfico de progreso ${year}`}>
+            <defs>
+              <linearGradient id={`gap-line-${year}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor={PLAYER_META.shai.color} />
+                <stop offset="49%" stopColor={PLAYER_META.shai.color} />
+                <stop offset="50%" stopColor="#7a8496" />
+                <stop offset="51%" stopColor={PLAYER_META.ronald.color} />
+                <stop offset="100%" stopColor={PLAYER_META.ronald.color} />
+              </linearGradient>
+            </defs>
+            {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
+              <line
+                key={fraction}
+                x1={padding}
+                y1={height - padding - fraction * (height - padding * 2)}
+                x2={width - padding}
+                y2={height - padding - fraction * (height - padding * 2)}
+                className="chart-grid-line"
               />
-              <path
-                d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
-                fill="rgba(255,69,58,0.09)"
-              />
+            ))}
 
-              <polyline points={shaiPoints} fill="none" stroke={PLAYER_META.shai.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
-              <polyline points={ronaldPoints} fill="none" stroke={PLAYER_META.ronald.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
-            </>
-          )}
+            {chartView === 'gap' ? (
+              <>
+                <rect
+                  x={padding}
+                  y={padding}
+                  width={width - padding * 2}
+                  height={gapMidpoint - padding}
+                  className="chart-gap-band chart-gap-band-shai"
+                />
+                <rect
+                  x={padding}
+                  y={gapMidpoint}
+                  width={width - padding * 2}
+                  height={height - padding - gapMidpoint}
+                  className="chart-gap-band chart-gap-band-ronald"
+                />
+                <line x1={padding} y1={yGapScale(0)} x2={width - padding} y2={yGapScale(0)} className="chart-zero-line" />
+                <polyline points={gapPoints} fill="none" stroke={`url(#gap-line-${year})`} strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
+              </>
+            ) : (
+              <>
+                <path
+                  d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                  fill="rgba(10,132,255,0.1)"
+                />
+                <path
+                  d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                  fill="rgba(255,69,58,0.09)"
+                />
 
-          {activeIndex !== null ? (
-            <g aria-hidden="true">
+                <polyline points={shaiPoints} fill="none" stroke={PLAYER_META.shai.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={ronaldPoints} fill="none" stroke={PLAYER_META.ronald.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+              </>
+            )}
+
+            {activeIndex !== null ? (
               <line
                 x1={inspectedX}
                 y1={padding}
                 x2={inspectedX}
                 y2={height - padding}
                 className="chart-hover-line"
+                aria-hidden="true"
               />
-              {chartView === 'gap' ? (
-                <circle
-                  cx={inspectedX}
-                  cy={yGapScale(inspectedGap)}
-                  r="1.35"
-                  className={`chart-active-dot ${inspectedGap >= 0 ? 'chart-active-dot-shai' : 'chart-active-dot-ronald'}`}
-                />
-              ) : (
-                <>
-                  <circle cx={inspectedX} cy={yScale(inspectedPoint.shai)} r="1.35" className="chart-active-dot chart-active-dot-shai" />
-                  <circle cx={inspectedX} cy={yScale(inspectedPoint.ronald)} r="1.35" className="chart-active-dot chart-active-dot-ronald" />
-                </>
-              )}
-            </g>
+            ) : null}
+
+            {chartView === 'score'
+              ? chartData.map((point, index) => (
+                  <g key={`${point.date}-${index}`}>
+                    <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
+                    <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
+                  </g>
+                ))
+              : null}
+
+            {chartData.map((point, index) => (
+              <rect
+                key={`hit-${point.date}-${index}`}
+                x={xScale(index) - Math.max((width - padding * 2) / denominator / 2, 2)}
+                y={padding}
+                width={Math.max((width - padding * 2) / denominator, 4)}
+                height={height - padding * 2}
+                className="chart-hit-zone"
+                tabIndex="0"
+                role="button"
+                aria-label={`${formatEventDate(point.date)}: Shai ${point.shai}, Ronald ${point.ronald}`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onFocus={() => setActiveIndex(index)}
+                onBlur={clearActiveIndex}
+                onClick={() => setActiveIndex(index)}
+              />
+            ))}
+          </svg>
+
+          {chartView === 'gap' ? (
+            <div className="chart-gap-labels" aria-hidden="true">
+              <span className="chart-gap-label shai">Shai gana por...</span>
+              <span className="chart-gap-label ronald">Ronald gana por...</span>
+            </div>
           ) : null}
 
-          {chartView === 'score'
-            ? chartData.map((point, index) => (
-                <g key={`${point.date}-${index}`}>
-                  <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
-                  <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
-                </g>
-              ))
-            : null}
+          {activeIndex !== null ? (
+            chartView === 'gap' ? (
+              <span
+                className={`chart-focus-dot ${inspectedGap >= 0 ? 'shai' : 'ronald'}`}
+                style={{ left: `${inspectedLeftPct}%`, top: `${inspectedTopPct}%` }}
+                aria-hidden="true"
+              />
+            ) : (
+              <>
+                <span
+                  className="chart-focus-dot shai"
+                  style={{ left: `${inspectedLeftPct}%`, top: `${shaiMarkerTopPct}%` }}
+                  aria-hidden="true"
+                />
+                <span
+                  className="chart-focus-dot ronald"
+                  style={{ left: `${inspectedLeftPct}%`, top: `${ronaldMarkerTopPct}%` }}
+                  aria-hidden="true"
+                />
+              </>
+            )
+          ) : null}
 
-          {chartData.map((point, index) => (
-            <rect
-              key={`hit-${point.date}-${index}`}
-              x={xScale(index) - Math.max((width - padding * 2) / denominator / 2, 2)}
-              y={padding}
-              width={Math.max((width - padding * 2) / denominator, 4)}
-              height={height - padding * 2}
-              className="chart-hit-zone"
-              tabIndex="0"
-              role="button"
-              aria-label={`${formatEventDate(point.date)}: Shai ${point.shai}, Ronald ${point.ronald}`}
-              onMouseEnter={() => setActiveIndex(index)}
-              onFocus={() => setActiveIndex(index)}
-              onBlur={clearActiveIndex}
-              onClick={() => setActiveIndex(index)}
-            />
-          ))}
-        </svg>
-
-        <div className="chart-months" aria-hidden="true">
-          {monthTicks.map((tick) => (
-            <span
-              key={`${tick.label}-${tick.index}`}
-              className="chart-month"
-              style={{ left: `${padding + (tick.index / denominator) * (100 - padding * 2)}%` }}
-            >
-              {tick.label}
-            </span>
-          ))}
+          <div className="chart-months" aria-hidden="true">
+            {monthTicks.map((tick) => (
+              <span
+                key={`${tick.label}-${tick.index}`}
+                className="chart-month"
+                style={{ left: `${padding + (tick.index / denominator) * (100 - padding * 2)}%` }}
+              >
+                {tick.label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </section>
