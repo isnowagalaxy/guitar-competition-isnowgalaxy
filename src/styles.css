@@ -425,10 +425,6 @@ button {
   font-size: 11px;
 }
 
-.chart-scale-toggle {
-  font-size: 11px;
-}
-
 .legend-item {
   display: inline-flex;
   align-items: center;
@@ -518,6 +514,7 @@ button {
   left: 28px;
   right: 0;
   height: 232px;
+  cursor: crosshair;
 }
 
 .chart-svg {
@@ -612,8 +609,13 @@ button {
 
 .chart-hit-zone {
   fill: transparent;
-  cursor: crosshair;
   outline: none;
+}
+
+.chart-reset-btn {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .chart-hit-zone:focus-visible {

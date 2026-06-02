@@ -45,6 +45,10 @@ const ACTION_TYPES = [
 
 const EDIT_TOKEN_SESSION_KEY = 'svr-edit-token-session';
 
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function getLeaderLabel(shaiTotal, ronaldTotal, outcomeOverride = null) {
   if (shaiTotal === ronaldTotal) {
     const overrideWinner = outcomeOverride?.winner;
@@ -87,7 +91,13 @@ function getStoragePill(syncMeta) {
 function ChartCard({ year, chartData }) {
   const [activeIndex, setActiveIndex] = useState(null);
   const [chartView, setChartView] = useState('score');
-  const [chartScale, setChartScale] = useState('auto');
+  const [chartRange, setChartRange] = useState({ start: 0, end: null });
+  const plotAreaRef = useRef(null);
+
+  useEffect(() => {
+    setActiveIndex(null);
+    setChartRange({ start: 0, end: null });
+  }, [year, chartData.length]);
 
   if (!chartData.length) {
     return (
@@ -109,38 +119,31 @@ function ChartCard({ year, chartData }) {
   const width = 100;
   const height = 54;
   const padding = 8;
+  const rangeStart = clampNumber(chartRange.start || 0, 0, chartData.length - 1);
+  const rangeEnd = clampNumber(chartRange.end ?? chartData.length - 1, rangeStart, chartData.length - 1);
+  const visibleData = chartData.slice(rangeStart, rangeEnd + 1);
   const rawMaxValue = Math.max(
-    chartData.at(-1)?.shai || 0,
-    chartData.at(-1)?.ronald || 0,
+    ...visibleData.flatMap((point) => [point.shai, point.ronald]),
     1,
   );
-  const maxValue =
-    chartScale === 'wide'
-      ? Math.ceil(rawMaxValue * 1.45)
-      : chartScale === 'close'
-        ? rawMaxValue
-        : Math.ceil(rawMaxValue * 1.12);
-  const denominator = Math.max(chartData.length - 1, 1);
+  const maxValue = Math.ceil(rawMaxValue * 1.12);
+  const denominator = Math.max(visibleData.length - 1, 1);
   const xScale = (index) => padding + (index / denominator) * (width - padding * 2);
   const yScale = (value) => height - padding - (value / maxValue) * (height - padding * 2);
 
-  const toPoints = (key) => chartData.map((point, index) => `${xScale(index)},${yScale(point[key])}`).join(' ');
+  const toPoints = (key) => visibleData.map((point, index) => `${xScale(index)},${yScale(point[key])}`).join(' ');
   const shaiPoints = toPoints('shai');
   const ronaldPoints = toPoints('ronald');
-  const monthTicks = getMonthTicks(chartData);
-  const rawGapMaxValue = Math.max(...chartData.map((point) => Math.abs(point.shai - point.ronald)), 1);
-  const gapMaxValue =
-    chartScale === 'wide'
-      ? Math.ceil(rawGapMaxValue * 2)
-      : chartScale === 'close'
-        ? rawGapMaxValue
-        : Math.ceil(rawGapMaxValue * 1.25);
+  const monthTicks = getMonthTicks(visibleData);
+  const rawGapMaxValue = Math.max(...visibleData.map((point) => Math.abs(point.shai - point.ronald)), 1);
+  const gapMaxValue = Math.ceil(rawGapMaxValue * 1.25);
   const gapMidpoint = height / 2;
   const yGapScale = (value) => gapMidpoint - (value / gapMaxValue) * (height / 2 - padding);
-  const gapPoints = chartData.map((point, index) => `${xScale(index)},${yGapScale(point.shai - point.ronald)}`).join(' ');
-  const inspectedIndex = activeIndex ?? chartData.length - 1;
+  const gapPoints = visibleData.map((point, index) => `${xScale(index)},${yGapScale(point.shai - point.ronald)}`).join(' ');
+  const inspectedIndex = clampNumber(activeIndex ?? rangeEnd, rangeStart, rangeEnd);
   const inspectedPoint = chartData[inspectedIndex];
-  const inspectedX = xScale(inspectedIndex);
+  const inspectedVisibleIndex = inspectedIndex - rangeStart;
+  const inspectedX = xScale(inspectedVisibleIndex);
   const inspectedLeader =
     inspectedPoint && inspectedPoint.shai !== inspectedPoint.ronald
       ? (inspectedPoint.shai > inspectedPoint.ronald ? 'shai' : 'ronald')
@@ -156,6 +159,7 @@ function ChartCard({ year, chartData }) {
   const shaiMarkerTopPct = (yScale(inspectedPoint.shai) / height) * 100;
   const ronaldMarkerTopPct = (yScale(inspectedPoint.ronald) / height) * 100;
   const leaderTone = inspectedLeader || 'tie';
+  const hasZoom = rangeStart > 0 || rangeEnd < chartData.length - 1;
   const yAxisLabels =
     chartView === 'gap'
       ? [
@@ -169,6 +173,39 @@ function ChartCard({ year, chartData }) {
           { label: '0', top: `${(yScale(0) / height) * 100}%` },
         ];
   const clearActiveIndex = () => setActiveIndex(null);
+  const resetZoom = () => {
+    setChartRange({ start: 0, end: null });
+    setActiveIndex(null);
+  };
+
+  const handleChartWheel = (event) => {
+    if (chartData.length < 3) return;
+    event.preventDefault();
+
+    const currentSpan = rangeEnd - rangeStart + 1;
+    const rect = plotAreaRef.current?.getBoundingClientRect();
+    const focusRatio = rect
+      ? clampNumber((event.clientX - rect.left) / rect.width, 0, 1)
+      : 0.5;
+
+    if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      const direction = Math.sign(event.deltaX || event.deltaY);
+      const panBy = Math.max(1, Math.round(currentSpan * 0.08)) * direction;
+      const nextStart = clampNumber(rangeStart + panBy, 0, chartData.length - currentSpan);
+      setChartRange({ start: nextStart, end: nextStart + currentSpan - 1 });
+      return;
+    }
+
+    const minSpan = Math.min(4, chartData.length);
+    const zoomFactor = event.deltaY > 0 ? 1.22 : 0.82;
+    const nextSpan = clampNumber(Math.round(currentSpan * zoomFactor), minSpan, chartData.length);
+    const focusIndex = rangeStart + focusRatio * (currentSpan - 1);
+    const nextStart = clampNumber(Math.round(focusIndex - focusRatio * (nextSpan - 1)), 0, chartData.length - nextSpan);
+    const nextEnd = nextStart + nextSpan - 1;
+
+    setChartRange({ start: nextStart, end: nextEnd });
+    setActiveIndex(clampNumber(Math.round(focusIndex), nextStart, nextEnd));
+  };
 
   return (
     <section className="card chart-card">
@@ -204,29 +241,11 @@ function ChartCard({ year, chartData }) {
               Diferencia
             </button>
           </div>
-          <div className="segmented chart-scale-toggle" aria-label="Escala del gráfico">
-            <button
-              className={`segment ${chartScale === 'auto' ? 'active' : ''}`}
-              type="button"
-              onClick={() => setChartScale('auto')}
-            >
-              Auto
+          {hasZoom ? (
+            <button className="btn btn-ghost chart-reset-btn" type="button" onClick={resetZoom}>
+              Reset zoom
             </button>
-            <button
-              className={`segment ${chartScale === 'close' ? 'active' : ''}`}
-              type="button"
-              onClick={() => setChartScale('close')}
-            >
-              Close
-            </button>
-            <button
-              className={`segment ${chartScale === 'wide' ? 'active' : ''}`}
-              type="button"
-              onClick={() => setChartScale('wide')}
-            >
-              Wide
-            </button>
-          </div>
+          ) : null}
         </div>
       </div>
 
@@ -257,10 +276,17 @@ function ChartCard({ year, chartData }) {
             </span>
           ))}
         </div>
-        <div className="chart-plot-area">
+        <div className="chart-plot-area" ref={plotAreaRef} onWheel={handleChartWheel}>
           <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" aria-label={`Gráfico de progreso ${year}`}>
             <defs>
-              <linearGradient id={`gap-line-${year}`} x1="0" x2="0" y1="0" y2="1">
+              <linearGradient
+                id={`gap-line-${year}`}
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                x2="0"
+                y1="0"
+                y2={height}
+              >
                 <stop offset="0%" stopColor={PLAYER_META.shai.color} />
                 <stop offset="49%" stopColor={PLAYER_META.shai.color} />
                 <stop offset="50%" stopColor="#7a8496" />
@@ -301,11 +327,11 @@ function ChartCard({ year, chartData }) {
             ) : (
               <>
                 <path
-                  d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                  d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(visibleData.length - 1)},${height - padding} Z`}
                   fill="rgba(10,132,255,0.1)"
                 />
                 <path
-                  d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                  d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(visibleData.length - 1)},${height - padding} Z`}
                   fill="rgba(255,69,58,0.09)"
                 />
 
@@ -325,16 +351,7 @@ function ChartCard({ year, chartData }) {
               />
             ) : null}
 
-            {chartView === 'score'
-              ? chartData.map((point, index) => (
-                  <g key={`${point.date}-${index}`}>
-                    <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
-                    <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
-                  </g>
-                ))
-              : null}
-
-            {chartData.map((point, index) => (
+            {visibleData.map((point, index) => (
               <rect
                 key={`hit-${point.date}-${index}`}
                 x={xScale(index) - Math.max((width - padding * 2) / denominator / 2, 2)}
@@ -345,10 +362,10 @@ function ChartCard({ year, chartData }) {
                 tabIndex="0"
                 role="button"
                 aria-label={`${formatEventDate(point.date)}: Shai ${point.shai}, Ronald ${point.ronald}`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onFocus={() => setActiveIndex(index)}
+                onMouseEnter={() => setActiveIndex(rangeStart + index)}
+                onFocus={() => setActiveIndex(rangeStart + index)}
                 onBlur={clearActiveIndex}
-                onClick={() => setActiveIndex(index)}
+                onClick={() => setActiveIndex(rangeStart + index)}
               />
             ))}
           </svg>
