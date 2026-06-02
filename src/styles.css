@@ -440,18 +440,129 @@ button {
   height: 270px;
   margin-top: 10px;
   max-width: 100%;
-  overflow: clip;
+  overflow: visible;
 }
 
 .chart-svg {
   width: 100%;
   height: 232px;
   display: block;
+  overflow: visible;
 }
 
 .chart-grid-line {
   stroke: rgba(16, 19, 24, 0.08);
   stroke-width: 0.16;
+}
+
+.chart-hover-line {
+  stroke: rgba(16, 19, 24, 0.24);
+  stroke-width: 0.22;
+  stroke-dasharray: 1.2 1.2;
+}
+
+.chart-active-dot {
+  stroke: rgba(255, 255, 255, 0.94);
+  stroke-width: 0.48;
+  filter: drop-shadow(0 1px 1.5px rgba(16, 19, 24, 0.22));
+}
+
+.chart-active-dot-shai {
+  fill: #0a84ff;
+}
+
+.chart-active-dot-ronald {
+  fill: #ff453a;
+}
+
+.chart-hit-zone {
+  fill: transparent;
+  cursor: crosshair;
+  outline: none;
+}
+
+.chart-hit-zone:focus-visible {
+  stroke: rgba(10, 132, 255, 0.35);
+  stroke-width: 0.35;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  width: 172px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 18px 40px rgba(16, 19, 24, 0.13);
+  backdrop-filter: saturate(180%) blur(18px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.chart-tooltip.align-left {
+  transform: translateX(0);
+}
+
+.chart-tooltip.align-right {
+  transform: translateX(-100%);
+}
+
+.chart-tooltip-date {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.chart-tooltip-score-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  margin-top: 9px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.chart-tooltip-score-grid strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.chart-tooltip-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.chart-tooltip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.chart-tooltip-player.shai {
+  color: #0a84ff;
+}
+
+.chart-tooltip-player.ronald {
+  color: #ff453a;
+}
+
+.chart-tooltip-footer {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(16, 19, 24, 0.08);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .chart-months {
@@ -1110,6 +1221,12 @@ button {
 
   .chart-month {
     font-size: 10px;
+  }
+
+  .chart-tooltip {
+    top: 4px;
+    width: 150px;
+    padding: 9px;
   }
 
   .stats-line {

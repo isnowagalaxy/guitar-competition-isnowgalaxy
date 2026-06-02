@@ -85,6 +85,8 @@ function getStoragePill(syncMeta) {
 }
 
 function ChartCard({ year, chartData }) {
+  const [activeIndex, setActiveIndex] = useState(null);
+
   if (!chartData.length) {
     return (
       <section className="card chart-card">
@@ -118,6 +120,16 @@ function ChartCard({ year, chartData }) {
   const shaiPoints = toPoints('shai');
   const ronaldPoints = toPoints('ronald');
   const monthTicks = getMonthTicks(chartData);
+  const activePoint = activeIndex === null ? null : chartData[activeIndex];
+  const activeX = activeIndex === null ? null : xScale(activeIndex);
+  const activeLeft = activeIndex === null ? null : padding + (activeIndex / denominator) * (100 - padding * 2);
+  const tooltipAlign = activeLeft !== null && activeLeft > 68 ? 'right' : activeLeft !== null && activeLeft < 32 ? 'left' : 'center';
+  const activeLeader =
+    activePoint && activePoint.shai !== activePoint.ronald
+      ? (activePoint.shai > activePoint.ronald ? 'shai' : 'ronald')
+      : null;
+  const activeDiff = activePoint ? Math.abs(activePoint.shai - activePoint.ronald) : 0;
+  const clearActiveIndex = () => setActiveIndex(null);
 
   return (
     <section className="card chart-card">
@@ -138,7 +150,10 @@ function ChartCard({ year, chartData }) {
         </div>
       </div>
 
-      <div className="chart-wrap">
+      <div
+        className="chart-wrap"
+        onMouseLeave={clearActiveIndex}
+      >
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" aria-label={`Gráfico de progreso ${year}`}>
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
             <line
@@ -163,13 +178,70 @@ function ChartCard({ year, chartData }) {
           <polyline points={shaiPoints} fill="none" stroke={PLAYER_META.shai.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
           <polyline points={ronaldPoints} fill="none" stroke={PLAYER_META.ronald.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
 
+          {activePoint ? (
+            <g className="chart-active-layer" aria-hidden="true">
+              <line
+                x1={activeX}
+                y1={padding}
+                x2={activeX}
+                y2={height - padding}
+                className="chart-hover-line"
+              />
+              <circle cx={activeX} cy={yScale(activePoint.shai)} r="1.35" className="chart-active-dot chart-active-dot-shai" />
+              <circle cx={activeX} cy={yScale(activePoint.ronald)} r="1.35" className="chart-active-dot chart-active-dot-ronald" />
+            </g>
+          ) : null}
+
           {chartData.map((point, index) => (
             <g key={`${point.date}-${index}`}>
               <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
               <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
             </g>
           ))}
+
+          {chartData.map((point, index) => (
+            <rect
+              key={`hit-${point.date}-${index}`}
+              x={xScale(index) - Math.max((width - padding * 2) / denominator / 2, 2)}
+              y={padding}
+              width={Math.max((width - padding * 2) / denominator, 4)}
+              height={height - padding * 2}
+              className="chart-hit-zone"
+              tabIndex="0"
+              role="button"
+              aria-label={`${formatEventDate(point.date)}: Shai ${point.shai}, Ronald ${point.ronald}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onFocus={() => setActiveIndex(index)}
+              onBlur={clearActiveIndex}
+              onClick={() => setActiveIndex(index)}
+            />
+          ))}
         </svg>
+
+        {activePoint ? (
+          <div
+            className={`chart-tooltip align-${tooltipAlign}`}
+            style={{ left: `${activeLeft}%` }}
+            role="status"
+          >
+            <div className="chart-tooltip-date">{formatEventDate(activePoint.date)}</div>
+            <div className="chart-tooltip-score-grid">
+              <span className="chart-tooltip-player shai">
+                <span className="chart-tooltip-dot" />
+                Shai
+              </span>
+              <strong>{activePoint.shai}</strong>
+              <span className="chart-tooltip-player ronald">
+                <span className="chart-tooltip-dot" />
+                Ronald
+              </span>
+              <strong>{activePoint.ronald}</strong>
+            </div>
+            <div className="chart-tooltip-footer">
+              {activeLeader ? `${PLAYER_META[activeLeader].name} +${activeDiff}` : 'Empate'}
+            </div>
+          </div>
+        ) : null}
 
         <div className="chart-months" aria-hidden="true">
           {monthTicks.map((tick) => (
