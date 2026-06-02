@@ -391,6 +391,8 @@ export default function App() {
 
   const importInputRef = useRef(null);
   const importModeRef = useRef('merge');
+  const pendingSaveRef = useRef(null);
+  const saveInFlightRef = useRef(false);
   const activeWriteToken = (sessionEditToken || bundledWriteToken || '').trim();
   const canEdit = Boolean(activeWriteToken);
   const hasBundledWriteToken = Boolean(bundledWriteToken);
@@ -440,23 +442,55 @@ export default function App() {
     };
   }, [activeWriteToken]);
 
-  async function persist(nextEvents, notice = '') {
-    const normalized = sortEvents(normalizeEvents(nextEvents));
-    setEvents(normalized);
-    setSyncMeta((previous) => ({ ...previous, saving: true }));
+  function queueSave(eventsToSave, notice = '', token = activeWriteToken) {
+    pendingSaveRef.current = {
+      events: sortEvents(normalizeEvents(eventsToSave)),
+      notice,
+      token,
+    };
+    void flushSaveQueue();
+  }
 
-    const result = await saveEventsSnapshot(normalized, { tokenOverride: activeWriteToken });
-    setEvents(result.events);
-    setSyncMeta((previous) => ({
-      ...previous,
-      storageMode: result.storageMode,
-      remoteConfigured: result.remoteConfigured,
-      remoteError: result.remoteError,
-      saving: false,
-      lastSavedAt: new Date().toISOString(),
-    }));
+  async function flushSaveQueue() {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
 
-    if (notice) setStatusMessage(notice);
+    try {
+      while (pendingSaveRef.current) {
+        const job = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+
+        setSyncMeta((previous) => ({ ...previous, saving: true }));
+        const result = await saveEventsSnapshot(job.events, { tokenOverride: job.token });
+        setSyncMeta((previous) => ({
+          ...previous,
+          storageMode: result.storageMode,
+          remoteConfigured: result.remoteConfigured,
+          remoteError: result.remoteError,
+          saving: Boolean(pendingSaveRef.current),
+          lastSavedAt: new Date().toISOString(),
+        }));
+
+        if (job.notice) setStatusMessage(job.notice);
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      setSyncMeta((previous) => ({ ...previous, saving: false }));
+    }
+  }
+
+  function persist(nextEventsOrUpdater, notice = '') {
+    setEvents((currentEvents) => {
+      const isUpdater = typeof nextEventsOrUpdater === 'function';
+      const nextEvents =
+        isUpdater
+          ? nextEventsOrUpdater(currentEvents)
+          : nextEventsOrUpdater;
+      if (isUpdater && nextEvents === currentEvents) return currentEvents;
+      const normalized = sortEvents(normalizeEvents(nextEvents));
+      queueSave(normalized, notice, activeWriteToken);
+      return normalized;
+    });
   }
 
   const requireEdit = () => {
@@ -533,28 +567,33 @@ export default function App() {
     if (newEvent.year !== selectedYear) {
       setSelectedYear(newEvent.year);
     }
-    persist([...events, newEvent], `Punto agregado: ${PLAYER_META[player].name} · ${EVENT_TYPE_META[type].shortLabel}`);
+    persist(
+      (currentEvents) => [...currentEvents, newEvent],
+      `Punto agregado: ${PLAYER_META[player].name} · ${EVENT_TYPE_META[type].shortLabel}`,
+    );
   };
 
   const removeLastPoint = (player, type) => {
     if (!requireEdit()) return;
-    const target = [...events]
-      .filter((event) => event.year === selectedYear && event.player === player && event.type === type)
-      .sort((a, b) => {
-        const byDate = b.eventDate.localeCompare(a.eventDate);
-        if (byDate !== 0) return byDate;
-        const byCreated = (b.createdAt || '').localeCompare(a.createdAt || '');
-        if (byCreated !== 0) return byCreated;
-        return String(b.id).localeCompare(String(a.id));
-      })[0];
-
-    if (!target) {
-      setStatusMessage('No hay un punto para quitar en esa categoría.');
-      return;
-    }
-
     persist(
-      events.filter((event) => event.id !== target.id),
+      (currentEvents) => {
+        const target = [...currentEvents]
+          .filter((event) => event.year === selectedYear && event.player === player && event.type === type)
+          .sort((a, b) => {
+            const byDate = b.eventDate.localeCompare(a.eventDate);
+            if (byDate !== 0) return byDate;
+            const byCreated = (b.createdAt || '').localeCompare(a.createdAt || '');
+            if (byCreated !== 0) return byCreated;
+            return String(b.id).localeCompare(String(a.id));
+          })[0];
+
+        if (!target) {
+          setStatusMessage('No hay un punto para quitar en esa categoría.');
+          return currentEvents;
+        }
+
+        return currentEvents.filter((event) => event.id !== target.id);
+      },
       `Se quitó el último punto de ${PLAYER_META[player].name} (${EVENT_TYPE_META[type].shortLabel}).`,
     );
   };
@@ -564,7 +603,7 @@ export default function App() {
     const event = events.find((item) => item.id === eventId);
     if (!event) return;
     persist(
-      events.filter((item) => item.id !== eventId),
+      (currentEvents) => currentEvents.filter((item) => item.id !== eventId),
       `Evento eliminado: ${PLAYER_META[event.player].name} · ${EVENT_TYPE_META[event.type].shortLabel}`,
     );
   };

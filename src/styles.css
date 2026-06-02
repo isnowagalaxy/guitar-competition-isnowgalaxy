@@ -36,6 +36,10 @@ input {
   font: inherit;
 }
 
+button {
+  touch-action: manipulation;
+}
+
 .app-shell {
   position: relative;
   min-height: 100vh;

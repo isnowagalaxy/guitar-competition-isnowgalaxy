@@ -162,10 +162,13 @@ function readEvents_(sheet) {
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
+    var eventDate = normalizeDateValue_(row[1], row[5]);
+    var year = safeString_(row[2]);
+    if (!year && eventDate) year = eventDate.slice(0, 4);
     var event = {
       id: safeString_(row[0]),
-      eventDate: safeString_(row[1]),
-      year: safeString_(row[2]),
+      eventDate: eventDate,
+      year: year,
       player: safeString_(row[3]),
       type: safeString_(row[4]),
       createdAt: safeString_(row[5]),
@@ -265,13 +268,43 @@ function normalizeEvent_(raw, index) {
 }
 
 function safeDateString_(value) {
-  var s = safeString_(value);
-  return s ? s.slice(0, 10) : '';
+  return normalizeDateValue_(value, '');
 }
 
 function safeString_(value) {
   if (value === null || value === undefined) return '';
   return String(value);
+}
+
+function normalizeDateValue_(value, fallback) {
+  var timezone = Session.getScriptTimeZone();
+
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, timezone, 'yyyy-MM-dd');
+  }
+
+  var s = safeString_(value).trim();
+  if (!s && fallback) return normalizeDateValue_(fallback, '');
+  if (!s) return '';
+
+  var isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return isoMatch[1] + '-' + isoMatch[2] + '-' + isoMatch[3];
+
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    var serial = Number(s);
+    if (isFinite(serial) && serial > 0) {
+      var millis = Math.round((serial - 25569) * 86400 * 1000);
+      return Utilities.formatDate(new Date(millis), 'UTC', 'yyyy-MM-dd');
+    }
+  }
+
+  var parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, timezone, 'yyyy-MM-dd');
+  }
+
+  if (fallback) return normalizeDateValue_(fallback, '');
+  return '';
 }
 
 function logSync_(config, meta) {

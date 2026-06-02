@@ -52,9 +52,45 @@ export function getTodayIsoLocal() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function dateObjectToIsoLocal(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function sheetsSerialDateToIso(value) {
+  const serial = Number(value);
+  if (!Number.isFinite(serial) || serial <= 0) return '';
+  const millis = Math.round((serial - 25569) * 86400 * 1000);
+  return dateObjectToIsoLocal(new Date(millis));
+}
+
+export function normalizeDateLike(value, fallback = '') {
+  if (value instanceof Date) return dateObjectToIsoLocal(value);
+
+  const raw = String(value || '').trim();
+  if (!raw) return fallback ? normalizeDateLike(fallback) : '';
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const serialDate = sheetsSerialDateToIso(raw);
+    if (serialDate) return serialDate;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return dateObjectToIsoLocal(parsed);
+
+  return fallback ? normalizeDateLike(fallback) : '';
+}
+
 export function toYearString(value) {
-  if (!value) return String(new Date().getFullYear());
-  return String(value).slice(0, 4);
+  const normalizedDate = normalizeDateLike(value);
+  if (normalizedDate) return normalizedDate.slice(0, 4);
+  return String(new Date().getFullYear());
 }
 
 function fallbackId() {
@@ -69,7 +105,7 @@ export function generateEventId() {
 }
 
 export function createEvent({ player, type, eventDate, source = 'manual', note = '' }) {
-  const normalizedDate = eventDate || getTodayIsoLocal();
+  const normalizedDate = normalizeDateLike(eventDate) || getTodayIsoLocal();
   return {
     id: generateEventId(),
     player,
@@ -83,7 +119,7 @@ export function createEvent({ player, type, eventDate, source = 'manual', note =
 }
 
 export function normalizeEvent(raw, index = 0) {
-  const eventDate = raw?.eventDate || raw?.date || getTodayIsoLocal();
+  const eventDate = normalizeDateLike(raw?.eventDate || raw?.date, raw?.createdAt) || getTodayIsoLocal();
   const player = raw?.player === 'ronald' ? 'ronald' : 'shai';
   const type = EVENT_TYPE_META[raw?.type] ? raw.type : 'clase';
   const id = raw?.id || `legacy-${toYearString(eventDate)}-${index}`;
@@ -97,7 +133,7 @@ export function normalizeEvent(raw, index = 0) {
     id,
     player,
     type,
-    eventDate: String(eventDate).slice(0, 10),
+    eventDate,
     year: String(raw?.year || toYearString(eventDate)),
     createdAt,
     source: raw?.source || 'manual',
@@ -246,7 +282,9 @@ export function getMonthTicks(chartData, locale = 'es-ES') {
   let previousMonth = '';
 
   chartData.forEach((item, index) => {
-    const label = new Date(`${item.date}T12:00:00`).toLocaleDateString(locale, { month: 'short' });
+    const normalizedDate = normalizeDateLike(item.date);
+    if (!normalizedDate) return;
+    const label = new Date(`${normalizedDate}T12:00:00`).toLocaleDateString(locale, { month: 'short' });
     if (label !== previousMonth) {
       ticks.push({ index, label });
       previousMonth = label;
@@ -282,14 +320,16 @@ export function getRecentEvents(events, { year = 'all', limit = 40 } = {}) {
 }
 
 export function formatEventDate(date, locale = 'es-ES') {
+  const normalizedDate = normalizeDateLike(date);
+  if (!normalizedDate) return date || '';
   try {
-    return new Date(`${date}T12:00:00`).toLocaleDateString(locale, {
+    return new Date(`${normalizedDate}T12:00:00`).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
   } catch {
-    return date;
+    return normalizedDate;
   }
 }
 
