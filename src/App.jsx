@@ -86,6 +86,7 @@ function getStoragePill(syncMeta) {
 
 function ChartCard({ year, chartData }) {
   const [activeIndex, setActiveIndex] = useState(null);
+  const [chartView, setChartView] = useState('score');
 
   if (!chartData.length) {
     return (
@@ -120,15 +121,31 @@ function ChartCard({ year, chartData }) {
   const shaiPoints = toPoints('shai');
   const ronaldPoints = toPoints('ronald');
   const monthTicks = getMonthTicks(chartData);
-  const activePoint = activeIndex === null ? null : chartData[activeIndex];
-  const activeX = activeIndex === null ? null : xScale(activeIndex);
-  const activeLeft = activeIndex === null ? null : padding + (activeIndex / denominator) * (100 - padding * 2);
-  const tooltipAlign = activeLeft !== null && activeLeft > 68 ? 'right' : activeLeft !== null && activeLeft < 32 ? 'left' : 'center';
-  const activeLeader =
-    activePoint && activePoint.shai !== activePoint.ronald
-      ? (activePoint.shai > activePoint.ronald ? 'shai' : 'ronald')
+  const gapMaxValue = Math.max(...chartData.map((point) => Math.abs(point.shai - point.ronald)), 1);
+  const gapMidpoint = height / 2;
+  const yGapScale = (value) => gapMidpoint - (value / gapMaxValue) * (height / 2 - padding);
+  const gapPoints = chartData.map((point, index) => `${xScale(index)},${yGapScale(point.shai - point.ronald)}`).join(' ');
+  const inspectedIndex = activeIndex ?? chartData.length - 1;
+  const inspectedPoint = chartData[inspectedIndex];
+  const inspectedX = xScale(inspectedIndex);
+  const inspectedLeader =
+    inspectedPoint && inspectedPoint.shai !== inspectedPoint.ronald
+      ? (inspectedPoint.shai > inspectedPoint.ronald ? 'shai' : 'ronald')
       : null;
-  const activeDiff = activePoint ? Math.abs(activePoint.shai - activePoint.ronald) : 0;
+  const inspectedDiff = inspectedPoint ? Math.abs(inspectedPoint.shai - inspectedPoint.ronald) : 0;
+  const inspectedGap = inspectedPoint ? inspectedPoint.shai - inspectedPoint.ronald : 0;
+  const yAxisLabels =
+    chartView === 'gap'
+      ? [
+          { label: `+${gapMaxValue}`, top: `${(yGapScale(gapMaxValue) / height) * 100}%` },
+          { label: '0', top: `${(yGapScale(0) / height) * 100}%` },
+          { label: `-${gapMaxValue}`, top: `${(yGapScale(-gapMaxValue) / height) * 100}%` },
+        ]
+      : [
+          { label: String(maxValue), top: `${(yScale(maxValue) / height) * 100}%` },
+          { label: String(Math.round(maxValue / 2)), top: `${(yScale(maxValue / 2) / height) * 100}%` },
+          { label: '0', top: `${(yScale(0) / height) * 100}%` },
+        ];
   const clearActiveIndex = () => setActiveIndex(null);
 
   return (
@@ -138,22 +155,57 @@ function ChartCard({ year, chartData }) {
           <p className="eyebrow">Gráfico</p>
           <h2 className="card-title">Progreso {year}</h2>
         </div>
-        <div className="chart-legend">
-          <span className="legend-item">
-            <span className="legend-dot legend-dot-shai" />
-            Shai
-          </span>
-          <span className="legend-item">
-            <span className="legend-dot legend-dot-ronald" />
-            Ronald
-          </span>
+        <div className="chart-tools">
+          <div className="chart-legend">
+            <span className="legend-item">
+              <span className="legend-dot legend-dot-shai" />
+              Shai
+            </span>
+            <span className="legend-item">
+              <span className="legend-dot legend-dot-ronald" />
+              Ronald
+            </span>
+          </div>
+          <div className="segmented chart-mode-toggle" aria-label="Vista del gráfico">
+            <button
+              className={`segment ${chartView === 'score' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setChartView('score')}
+            >
+              Acumulado
+            </button>
+            <button
+              className={`segment ${chartView === 'gap' ? 'active' : ''}`}
+              type="button"
+              onClick={() => setChartView('gap')}
+            >
+              Diferencia
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div className="chart-readout" role="status">
+        <span className="chart-readout-date">{formatEventDate(inspectedPoint.date)}</span>
+        <span className="chart-readout-score shai">Shai {inspectedPoint.shai}</span>
+        <span className="chart-readout-score ronald">Ronald {inspectedPoint.ronald}</span>
+        <strong>
+          {inspectedLeader ? `Diferencia: ${PLAYER_META[inspectedLeader].name} por ${inspectedDiff}` : 'Diferencia: empate'}
+        </strong>
       </div>
 
       <div
         className="chart-wrap"
         onMouseLeave={clearActiveIndex}
       >
+        <div className="chart-y-axis" aria-hidden="true">
+          <span className="chart-y-axis-title">{chartView === 'gap' ? 'Dif.' : 'Pts'}</span>
+          {yAxisLabels.map((label) => (
+            <span key={`${chartView}-${label.label}-${label.top}`} style={{ top: label.top }}>
+              {label.label}
+            </span>
+          ))}
+        </div>
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="chart-svg" aria-label={`Gráfico de progreso ${year}`}>
           {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
             <line
@@ -166,38 +218,60 @@ function ChartCard({ year, chartData }) {
             />
           ))}
 
-          <path
-            d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
-            fill="rgba(10,132,255,0.1)"
-          />
-          <path
-            d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
-            fill="rgba(255,69,58,0.09)"
-          />
+          {chartView === 'gap' ? (
+            <>
+              <line x1={padding} y1={yGapScale(0)} x2={width - padding} y2={yGapScale(0)} className="chart-zero-line" />
+              <polyline points={gapPoints} fill="none" stroke="#1f2937" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+            </>
+          ) : (
+            <>
+              <path
+                d={`M ${padding},${height - padding} L ${shaiPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                fill="rgba(10,132,255,0.1)"
+              />
+              <path
+                d={`M ${padding},${height - padding} L ${ronaldPoints} L ${xScale(chartData.length - 1)},${height - padding} Z`}
+                fill="rgba(255,69,58,0.09)"
+              />
 
-          <polyline points={shaiPoints} fill="none" stroke={PLAYER_META.shai.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
-          <polyline points={ronaldPoints} fill="none" stroke={PLAYER_META.ronald.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points={shaiPoints} fill="none" stroke={PLAYER_META.shai.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points={ronaldPoints} fill="none" stroke={PLAYER_META.ronald.color} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+            </>
+          )}
 
-          {activePoint ? (
-            <g className="chart-active-layer" aria-hidden="true">
+          {activeIndex !== null ? (
+            <g aria-hidden="true">
               <line
-                x1={activeX}
+                x1={inspectedX}
                 y1={padding}
-                x2={activeX}
+                x2={inspectedX}
                 y2={height - padding}
                 className="chart-hover-line"
               />
-              <circle cx={activeX} cy={yScale(activePoint.shai)} r="1.35" className="chart-active-dot chart-active-dot-shai" />
-              <circle cx={activeX} cy={yScale(activePoint.ronald)} r="1.35" className="chart-active-dot chart-active-dot-ronald" />
+              {chartView === 'gap' ? (
+                <circle
+                  cx={inspectedX}
+                  cy={yGapScale(inspectedGap)}
+                  r="1.35"
+                  className={`chart-active-dot ${inspectedGap >= 0 ? 'chart-active-dot-shai' : 'chart-active-dot-ronald'}`}
+                />
+              ) : (
+                <>
+                  <circle cx={inspectedX} cy={yScale(inspectedPoint.shai)} r="1.35" className="chart-active-dot chart-active-dot-shai" />
+                  <circle cx={inspectedX} cy={yScale(inspectedPoint.ronald)} r="1.35" className="chart-active-dot chart-active-dot-ronald" />
+                </>
+              )}
             </g>
           ) : null}
 
-          {chartData.map((point, index) => (
-            <g key={`${point.date}-${index}`}>
-              <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
-              <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
-            </g>
-          ))}
+          {chartView === 'score'
+            ? chartData.map((point, index) => (
+                <g key={`${point.date}-${index}`}>
+                  <circle cx={xScale(index)} cy={yScale(point.shai)} r="0.65" fill={PLAYER_META.shai.color} />
+                  <circle cx={xScale(index)} cy={yScale(point.ronald)} r="0.65" fill={PLAYER_META.ronald.color} />
+                </g>
+              ))
+            : null}
 
           {chartData.map((point, index) => (
             <rect
@@ -217,31 +291,6 @@ function ChartCard({ year, chartData }) {
             />
           ))}
         </svg>
-
-        {activePoint ? (
-          <div
-            className={`chart-tooltip align-${tooltipAlign}`}
-            style={{ left: `${activeLeft}%` }}
-            role="status"
-          >
-            <div className="chart-tooltip-date">{formatEventDate(activePoint.date)}</div>
-            <div className="chart-tooltip-score-grid">
-              <span className="chart-tooltip-player shai">
-                <span className="chart-tooltip-dot" />
-                Shai
-              </span>
-              <strong>{activePoint.shai}</strong>
-              <span className="chart-tooltip-player ronald">
-                <span className="chart-tooltip-dot" />
-                Ronald
-              </span>
-              <strong>{activePoint.ronald}</strong>
-            </div>
-            <div className="chart-tooltip-footer">
-              {activeLeader ? `${PLAYER_META[activeLeader].name} +${activeDiff}` : 'Empate'}
-            </div>
-          </div>
-        ) : null}
 
         <div className="chart-months" aria-hidden="true">
           {monthTicks.map((tick) => (
